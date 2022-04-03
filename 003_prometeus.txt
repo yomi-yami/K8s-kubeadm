@@ -1,0 +1,121 @@
+https://qiita.com/prodigy413/items/79a58ff913e6509c613f
+https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack#configuration
+
+# Get Repo Info
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# 確認
+helm search repo prometheus-community/kube-prometheus-stack
+
+# Configuration
+helm show values prometheus-community/kube-prometheus-stack
+
+vi config.yaml
+=====================
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - alertmanager.test.local
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - prometheus.test.local
+grafana:
+  adminPassword: xxxxxxx
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.test.local
+=====================
+
+# prometheus operator インストール
+
+## namespace(monitoring) 作成 ##
+kubectl create ns monitoring
+
+## 「prometheus-community/kube-prometheus-stack」を指定名前(prometheus)で指定namespace(monitoring)にインストール
+## 上記で作成した設定ファイル(config.yaml)を指定
+# helm install prometheus -n monitoring -f config.yaml prometheus-community/kube-prometheus-stack
+#普通に展開
+helm install prometheus -n monitoring prometheus-community/kube-prometheus-stack --timeout 20m
+
+#pending-installで進まないとき
+helm delete  prometheus -n monitoring 
+
+
+## 確認 ##
+kubectl get all -n monitoring
+
+# INgressからアクセスしたかったができなかった。
+# kubectl apply -f test-ingress_prometheus.yaml
+
+kubectl edit service/prometheus-grafana -n monitoring
+#変更前
+  ports:
+  - name: http-web
+    port: 80
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app.kubernetes.io/instance: prometheus
+    app.kubernetes.io/name: grafana
+  sessionAffinity: None
+  type: ClusterIP
+#変更後
+  ports:
+  - name: http-web
+    port: 80
+    protocol: TCP
+    targetPort: 3000
+    nodePort: 31000
+  selector:
+    app.kubernetes.io/instance: prometheus
+    app.kubernetes.io/name: grafana
+  sessionAffinity: None
+  type: NodePort
+
+
+# grafanaにログイン
+kubectl get secret --namespace monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+http://192.168.11.48:31000
+admin
+prom-operator
+
+
+■Lokiとfluent-bit
+https://github.com/grafana/helm-charts/tree/main/charts/loki-stack
+参考：https://blog.pistack.co.za/using-fluent-bit-to-log-to-loki-on-kubernetes/
+# ネームスペース作成
+kubectl create namespace logging
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+helm upgrade --install loki --namespace=logging grafana/loki-stack --set fluent-bit.enabled=true,promtail.enabled=false
+
+kubectl get all -n logging
+
+
+# gradfanaへlokiデータソースhttp://loki.logging:3100を追加
+http://192.168.11.48:31000/
+
+→ログは見えたね。
+
+
+
+PrometeusとElasticsearch比較
+欠損なしならElasticsearchか
+# Prometheus って Elasticsearch と何が違うの
+https://qiita.com/iijimakazuyuki/items/add01e65d32c79d108d6
+
+grafanaとkibvana比較
+https://qiita.com/MetricFire/items/5cff23de4c2d6bf71266
+
+loki保存期間
+https://qiita.com/comware_terashi/items/2818558e4aae039843ca
+
+

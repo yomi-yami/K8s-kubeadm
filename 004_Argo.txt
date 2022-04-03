@@ -1,0 +1,396 @@
+Argoやってみる。
+cd /home/shunsuke/20220320_argo
+kubectl create namespace argo
+#
+curl -sLO https://github.com/argoproj/argo-workflows/releases/download/v3.3.1/install.yaml
+vi ./install.yaml
+#ノードポート変更
+#変更前
+apiVersion: v1
+kind: Service
+metadata:
+  name: argo-server
+spec:
+  ports:
+  - name: web
+    port: 2746
+    targetPort: 2746
+  selector:
+    app: argo-server
+#変更後
+apiVersion: v1
+kind: Service
+metadata:
+  name: argo-server
+spec:
+  ports:
+  - name: web
+    port: 2746
+    targetPort: 2746
+    nodePort: 32000
+  selector:
+    app: argo-server
+  type: NodePort
+
+# -modeをserverへ2箇所？
+#変更前
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-server
+spec:
+  selector:
+    matchLabels:
+      app: argo-server
+  template:
+    metadata:
+      labels:
+        app: argo-server
+    spec:
+      containers:
+      - args:
+        - server
+#変更後
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-server
+spec:
+  selector:
+    matchLabels:
+      app: argo-server
+  template:
+    metadata:
+      labels:
+        app: argo-server
+    spec:
+      containers:
+      - args:
+        - server
+        - --auth-mode
+        - server
+
+kubectl apply -n argo -f ./install.yaml
+
+https://192.168.11.48:32000/
+
+
+#CILのインストール
+# Download the binary
+curl -sLO https://github.com/argoproj/argo-workflows/releases/download/v3.3.1/argo-linux-amd64.gz
+
+# Unzip
+gunzip argo-linux-amd64.gz
+
+# Make binary executable
+chmod +x argo-linux-amd64
+
+# Move binary to path
+sudo mv ./argo-linux-amd64 /usr/local/bin/argo
+
+# Test installation
+argo version
+
+# 実行用にnamespace作成
+kubectl create ns argo-renkei
+
+
+https://speakerdeck.com/makocchi/how-to-use-argo-workflows?slide=41
+# サンプルを実行　https://github.com/argoproj/argo-workflows/blob/master/examples/hello-world.yaml
+mkdir examples
+cd ./examples/
+vi hello-world.yaml
+
+argo submit hello-world.yaml    # submit a workflow spec to Kubernetes
+argo list                       # list current workflows
+argo get hello-world-xxx        # get info about a specific workflow
+argo logs hello-world-xxx       # print the logs from a workflow
+argo delete hello-world-xxx     # delete workflow
+
+
+# 処理が成功失敗したときのワークフローを自動削除したいとき
+  ttlStrategy:
+    secondsAfterCompletion: 10 #完了後に存続する秒数です
+    secondsAfterFailure: 5 #障害が発生してから存続する秒数
+    secondsAfterSuccess: 5 #成功後に存続する秒数です
+これらをworkflow-controllerが参照するConfigmapで登録するとデフォルトをセットできる。
+https://argoproj.github.io/argo-workflows/workflow-controller-configmap/
+https://argoproj.github.io/argo-workflows/default-workflow-specs/
+
+#  name: workflow-controller-configmapへ以下を追加
+data:
+  # Default values that will apply to all Workflows from this controller, unless overridden on the Workflow-level
+  workflowDefaults: |
+    metadata:
+      annotations:
+        argo: workflows
+      labels:
+        foo: bar
+    spec:
+      ttlStrategy:
+        secondsAfterSuccess: 5
+      parallelism: 1
+
+
+# 適用
+kubectl apply -n argo -f ./install.yaml
+kubectl apply -n argo -f ./install-db.yaml
+
+
+
+# サンプルで学習
+https://github.com/argoproj/argo-workflows/tree/master/examples#hello-world
+
+argo submit arguments-parameters.yaml -p message="goodbye world"
+argo submit arguments-parameters.yaml --parameter-file params.yaml
+argo submit arguments-parameters.yaml --entrypoint whalesay -p message="goodbye world"
+argo submit steps.yaml
+argo submit timeouts-step.yaml
+argo submit exit-code-output-variable.yaml
+argo submit suspend-template.yaml
+
+# argo-renkeiのネームスペースで動かして見る。
+argo submit hello-world-namespace.yaml
+
+
+# minioへアクセスさせる場合。
+http://192.168.11.48:32200
+admin
+password
+
+
+# minioのUIのportを
+  - name: http9000
+    port: 9000
+    protocol: TCP
+    targetPort: 9000
+  - name: http9001
+    port: 9001
+    protocol: TCP
+    targetPort: 9001
+    nodePort: 32200
+  type: NodePort
+
+
+# minioのUIのportを9001へ固定する。
+        app: minio
+    spec:
+      containers:
+      - command:
+        - minio
+        - server
+        - /data
+        - --console-address
+        - :9001
+
+
+# argo-serverをノードポートへ
+nodePort: 32000
+  type: NodePort
+
+# デフォルトは永久らしい。ので永久へ変更
+#    archiveTTL: 7d
+
+んーargoのネームスペースならアーカイブできる・・・
+
+kubectl apply -n argo -f ./install.yaml
+kubectl apply -n argo -f ./install-db.yaml
+
+#シークレットの登録,configの登録#権限付与は何が最低限かわからない。
+# kubectl apply -n argo-renkei -f ./install-secret.yaml
+# kubectl apply -n argo-renkei -f ./install-ConfigMap.yaml
+
+# とりあえず実行するなら。
+kubectl create rolebinding default-admin --clusterrole=admin --serviceaccount=argo:default --namespace=argo
+kubectl create rolebinding default-admin --clusterrole=admin --serviceaccount=argo-renkei:default --namespace=argo-renkei
+#削除の場合。
+#kubectl delete rolebinding default-admin  --namespace=argo-renkei
+
+argo submit dag-conditional-artifacts.yaml -n argo-renkei
+
+#別のnamespaceからのメトリクスを取れるように権限を付与
+kubectl apply -f ./promtheus-clusterRole.yaml
+
+
+# argoのアーカイブの永続化
+# minio
+vi ./install-db.yaml
+        volumeMounts:
+        - mountPath: /data
+          name: minio-storage
+      volumes:
+      - name: minio-storage
+        persistentVolumeClaim:
+        # 作成した PVC 名
+          claimName: minio-storage
+
+# postgresの永続化
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: argo-postgres-storage
+      volumes:
+      - name: argo-postgres-storage
+        persistentVolumeClaim:
+        # 作成した PVC 名
+          claimName: argo-postgres-storage
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-storage
+  namespace: argo
+  annotations:
+    # StorageClass の名称を指定
+    volume.beta.kubernetes.io/storage-class: nfs-client
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # リクエストするボリュームサイズ
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: argo-postgres-storage
+  namespace: argo
+  annotations:
+    # StorageClass の名称を指定
+    volume.beta.kubernetes.io/storage-class: nfs-client
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # リクエストするボリュームサイズ
+      storage: 5Gi
+
+kubectl apply -n argo -f ./install-db.yaml
+
+
+# volumeを共有する？
+# podから直接マウントする場合。
+sudo mkdir /home/nfsshare/nfs000
+
+# argoネームスペースに作成
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: volumes-pvc-
+  namespace: argo
+spec:
+  entrypoint: volumes-pvc-example
+
+  templates:
+  - name: volumes-pvc-example
+    steps:
+    - - name: generate
+        template: whalesay
+    - - name: print
+        template: print-message
+
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["echo generating message in volume; cowsay hello world | tee /mnt/vol/hello_world.txt"]
+      # Mount workdir volume at /mnt/vol before invoking docker/whalesay
+      volumeMounts:                     # same syntax as k8s Pod spec
+      - name: workdir
+        mountPath: /mnt/vol
+    volumes:
+    - name: workdir
+      nfs:
+        server: 192.168.11.47
+        path: "/home/nfsshare/nfs000"
+
+  - name: print-message
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ["echo getting message from volume; find /mnt/vol; cat /mnt/vol/hello_world.txt"]
+      # Mount workdir volume at /mnt/vol before invoking docker/whalesay
+      volumeMounts:                     # same syntax as k8s Pod spec
+      - name: workdir
+        mountPath: /mnt/vol
+    volumes:
+    - name: workdir
+      nfs:
+        server: 192.168.11.47
+        path: "/home/nfsshare/nfs000"
+
+# 確認
+# hello_world.txtをhello_world2.txtとしても破棄されずに見れているので単純に共有フォルダを見るだけならありなのかな？
+ll /home/nfsshare/nfs000
+
+
+# PVCを作成しておいて名前を指定するだけの場合
+# 
+# pvc作成
+vim pvc1.yml
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc1
+  namespace: argo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: nfs-client
+
+# 作成
+kubectl apply -f pvc1.yml
+
+# argoネームスペースに作成
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: volumes-pvc-
+  namespace: argo
+spec:
+  entrypoint: volumes-pvc-example
+
+  templates:
+  - name: volumes-pvc-example
+    steps:
+    - - name: generate
+        template: whalesay
+    - - name: print
+        template: print-message
+
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["echo generating message in volume; cowsay hello world | tee /mnt/vol/hello_world.txt"]
+      # Mount workdir volume at /mnt/vol before invoking docker/whalesay
+      volumeMounts:                     # same syntax as k8s Pod spec
+      - name: workdir
+        mountPath: /mnt/vol
+    volumes:
+      - name: workdir
+        persistentVolumeClaim:
+          claimName: pvc1
+
+  - name: print-message
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ["echo getting message from volume; find /mnt/vol; cat /mnt/vol/hello_world.txt"]
+      # Mount workdir volume at /mnt/vol before invoking docker/whalesay
+      volumeMounts:                     # same syntax as k8s Pod spec
+      - name: workdir
+        mountPath: /mnt/vol
+    volumes:
+      - name: workdir
+        persistentVolumeClaim:
+          claimName: pvc1
+
+# フォルダ名自動なんか・・・
+ll /home/nfsshare/
+argo-pvc1-pvc-61f39d7c-4df1-425b-a7df-47ce7a4cb9e1/

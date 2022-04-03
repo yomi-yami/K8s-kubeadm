@@ -1,0 +1,79 @@
+
+https://www.server-world.info/query?os=Ubuntu_20.04&p=nfs&f=1
+[1]	NFS サーバーの設定です。
+sudo apt -y install nfs-kernel-server
+vi /etc/idmapd.conf
+# 6行目：コメント解除して自ドメイン名に変更
+Domain = srv.world
+sudo vi /etc/exports
+# 最終行にマウント設定を記述
+# 例として [/home/nfsshare] を NFS 共有に設定
+# /home/nfsshare 10.0.0.0/24(rw,no_root_squash)
+/home/nfsshare 192.168.11.48(rw,no_root_squash)
+sudo mkdir /home/nfsshare
+sudo systemctl restart nfs-server
+
+###workerで操作####
+sudo apt -y install nfs-common
+sudo mount -t nfs 192.168.11.47:/home/nfsshare /mnt
+df -hT
+sudo umount /mnt
+###workerで操作####
+
+# クラスタにインストール
+# https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner
+# https://www.server-world.info/query?os=Ubuntu_20.04&p=kubernetes&f=13
+
+mkdir 20220327_storageclass
+cd ./20220327_storageclass/
+helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+
+# 削除の場合
+# helm delete nfs-subdir-external-provisioner
+
+#デフォルトを変更：storageClass.archiveOnDeleteをオフにする。
+helm install nfs-subdir-external-provisioner -n kube-system nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+    --set nfs.server=192.168.11.47 \
+    --set nfs.path=/home/nfsshare \
+    --set storageClass.archiveOnDelete=false
+
+
+kubectl get all
+kubectl get pvc
+kubectl get storageclass
+
+
+# PVC 作成
+vi my-pvc.yml
+
+kubectl apply -f my-pvc.yml
+kubectl get pvc
+# PV は自動生成される
+kubectl get pv
+
+vi my-pod.yml
+kubectl apply -f my-pod.yml
+kubectl get pod my-mginx -o wide
+# 11.47の/のdf結果と同じ
+kubectl exec my-mginx -- df /usr/share/nginx/html
+
+# index ファイルを作成して動作確認
+echo "Nginx Index" > index.html
+kubectl cp index.html my-mginx:/usr/share/nginx/html/index.html
+curl 192.168.226.88
+
+# 共有フォルダの確認
+ll /home/nfsshare/
+
+# 削除する場合は PVC を削除すると PV も削除される
+kubectl delete pod my-mginx
+kubectl delete pvc my-provisioner
+kubectl get pvc
+kubectl get pv
+
+# storageClass.archiveOnDelete=falseとしたのでpvc削除で消える。
+ll /home/nfsshare/
+
+
+
+

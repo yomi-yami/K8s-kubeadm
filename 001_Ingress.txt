@@ -1,0 +1,118 @@
+■NGINX Ingress Controller環境のセットアップ
+NGINX Ingress Controllerは2種類ある。
+https://docs.nginx.com/nginx-ingress-controller/installation/installation-with-helm/
+
+https://qiita.com/prodigy413/items/89fcb8cfb71e80f541d8
+
+# helmインストール
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh
+
+# helmにingress repo追加
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm search repo ingress-nginx/ingress-nginx
+
+# helmでNginx Ingress インストール
+## namespace(ingress-system) 作成
+kubectl create ns ingress-system
+
+# ポート80で公開したい。
+kubectl create ns ingress-system
+helm install hostnetwork-test-ingress ingress-nginx/ingress-nginx -n ingress-system --set controller.extraArgs.enable-ssl-passthrough="" --set controller.hostNetwork=true --set controller.service.type="" --set controller.kind=DaemonSet
+# マニフェスト適用
+kubectl apply -f test-ingress.yaml
+
+## 動作確認
+mkdir 20220319_Ingress
+cd 20220319_Ingress/
+vi ./test-ingress.yaml
+==test-ingress.yamlの中身==
+---
+### Ingress 作成
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+#  name: nginx-ingress
+  name: hostnetwork-test-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+#  - host: nginx.test.local
+#    http:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-svc
+            port:
+              number: 8080
+---
+### Service 作成
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc
+spec:
+  selector:
+    app: nginx
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 80
+---
+### Pod 作成
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.21.4
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 80
+==test-ingress.yamlの中身==
+
+## インストール後、確認
+helm list -n ingress-system
+kubectl get all -n ingress-system
+kubectl get svc -n ingress-system
+
+
+# 確認
+curl -I http://192.168.11.47:80
+curl -I http://192.168.11.48:80
+
+
+
+####### 削除 ############
+helm uninstall obi-test -n ingress-system
+kubectl delete -f test-ingress.yaml
+
+kubectl drain worker-1 --delete-local-data --force --ignore-daemonsets
+#削除するノードで実行 start
+sudo kubeadm reset
+sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -X
+
+#削除するノードで実行 end
+
+kubectl delete node worker-1
+kubectl drain control-plane --delete-local-data --force --ignore-daemonsets
+sudo kubeadm reset
+sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -X
+sudo rm $HOME/.kube/config
+####### 削除 ############
+
+
+
+
+
+

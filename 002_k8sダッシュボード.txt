@@ -1,0 +1,51 @@
+# いらないかな。
+https://qiita.com/yasubehe/items/838832fe488b72fcc887
+https://kubernetes.io/ja/docs/tasks/access-application-cluster/web-ui-dashboard/
+https://github.com/kubernetes/dashboard/tree/master
+
+
+# Nodeprtとなるようにする。
+wget https://raw.githubusercontent.com/kubernetes/dashboard/v2.5.1/aio/deploy/recommended.yaml
+# 修正
+kubectl apply -f recommended.yaml
+kubectl get svc -n kubernetes-dashboard
+
+https://192.168.11.47:30843/
+
+# Creating sample user
+https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md
+
+# dashbord-adminuser.yaml を作成
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kubernetes-dashboard
+
+
+# Getting a Bearer Token
+kubectl apply -f dashbord-adminuser.yaml
+kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/admin-user -o jsonpath="{.secrets[0].name}") -o go-template="{{.data.token | base64decode}}"
+
+
+
+
+# 結果をブラウザにトークンを入力
+eyJhbGciOiJSUzI1NiIsImtpZCI6IkxFLXZGLXFFZTFqSnowQ092Z0VUaVZuQmNCR1NTZ2o5aUNmUzIwd2RKZDgifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi11c2VyLXRva2VuLWN3c3h3Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFkbWluLXVzZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiIzNGQwZjNmMy00YmM0LTRiMzctYWZhMS1iYWI0Mjg1NGIzOWYiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZXJuZXRlcy1kYXNoYm9hcmQ6YWRtaW4tdXNlciJ9.Y8SPRb-V7yDPzCm9pgPcJaY1lR7gv_HaghEpd5P_SfDMhGD15yzqibsSW6-WDRXkVTE1Ecjh76nUV-Q7E3PXsvHy-DhBEP_lnBDNn8IT3kZ3wbBk3phvmIFjiPKSKryz17AMEVAO_uZIcSRI46AurTXX05IW9Pp5dfaKOuWIq5EzmNE8etICUITbpmvQ5M0KYUOzW22pC0NQ9R9ena3i5JNURtBaalXulTCu1Z5mxhlhMYKRcYeI9ApBooUtLuw1Q0PatNPlFUxsqRRcWXMvY56O-jEKK762yGmxLQlui5EJYmnkwEQ-MLmFzK7xSyeeUjGwKXbl-vY2-MuQFuMhcQ
+
+
+
+

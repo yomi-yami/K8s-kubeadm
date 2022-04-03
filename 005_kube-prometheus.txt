@@ -1,0 +1,110 @@
+https://github.com/prometheus-operator/kube-prometheus
+
+# インストール
+git clone https://github.com/prometheus-operator/kube-prometheus.git && kube-prometheus
+cd kube-prometheus/
+kubectl apply --server-side -f manifests/setup
+until kubectl get servicemonitors --all-namespaces ; do date; sleep 1; echo ""; done
+kubectl apply -f manifests/
+
+
+vi ./manifests/grafana-service.yaml
+nodePort: 31000
+type: NodePort
+
+http://192.168.11.47:31000/
+admin
+admin
+
+vi ./manifests/prometheus-service.yaml
+nodePort: 31100
+type: NodePort
+
+http://192.168.11.47:31100/
+
+
+#vi ./manifests/prometheus-prometheus.yaml
+#serviceMonitorNamespaceSelector: {argo}
+↓権限を付与する。
+
+https://dustinspecker.com/posts/viewing-argo-prometheus-metrics-using-kind/
+kubectl create role prometheus-k8s \
+  --namespace argo \
+  --resource services,endpoints,pods \
+  --verb get,list,watch
+kubectl create rolebinding prometheus-k8s \
+  --namespace argo \
+  --role prometheus-k8s \
+  --serviceaccount monitoring:prometheus-k8s
+
+kubectl label service workflow-controller-metrics app=workflow-controller --namespace argo
+
+kubectl apply -f argo-service-monitor.yaml
+
+検証
+argo submit dag-conditional-artifacts.yaml -n argo
+
+
+表示できた。ネームスペースごとに表示できるかな？
+
+
+
+## 永続化
+cd /home/shunsuke/00_prometheus-operator/kube-prometheus/manifests
+vi ./persisted-prometheus.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: persisted
+spec:
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: nfs-client
+        resources:
+          requests:
+            storage: 4Gi
+
+cd ..
+kubectl apply -f manifests/
+
+kubectl get pvc
+kubectl get pv
+
+
+ll /home/nfsshare/
+
+#grafanaを永続化
+vi ./manifests/grafana-deployment.yaml
+              #      - emptyDir: {}
+              #        name: grafana-storage
+      - name: grafana-storage
+        persistentVolumeClaim:
+        # 作成した PVC 名
+          claimName: grafana-storage
+
+# PV作成先のnamespce指定する。
+vi ./persisted-grafana.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage
+  namespace: monitoring
+  annotations:
+    # StorageClass の名称を指定
+    volume.beta.kubernetes.io/storage-class: nfs-client
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # リクエストするボリュームサイズ
+      storage: 5Gi
+
+
+kubectl apply -f manifests/
+kubectl get pvc
+kubectl get pv
+kubectl get pods -o wide -n monitoring
+# 上がってこなければ確認
+kubectl describe pod grafana-5d8f7658cf-sf4lx -n monitoring

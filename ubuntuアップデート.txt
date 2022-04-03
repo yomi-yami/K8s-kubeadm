@@ -1,0 +1,18 @@
+http://www.ifelse.jp/blog/ubuntu-02
+
+通常のアップデートの手順
+sudo apt-get update ： パッケージリスト（ /etc/apt/sources.list）を更新します。
+sudo apt-get check ： アップデート対象のパッケージで問題が起きないかチェックします。
+sudo apt-get -s upgrade ： シミュレーションを行い、「保留」の有無を確認します。
+sudo apt-get -u upgrade ： パッケージのアップデート。「保留」の有無を確認します。
+パッケージをインストールすると他の依存関係にあるパッケージが削除される場合に「保留（not upgraded）」になります。apt-get upgrade によるアップグレードで保留となってアップグレードできないときは、dist-upgradeを実行します。
+
+ 
+
+インストールされてるカーネル（ディストリビューション）の更新の手順
+apt-get update： パッケージリスト（ /etc/apt/sources.list）を更新します。
+apt-get -s dist-upgrade： シミュレーションを行い、「保留」の有無を確認します。
+apt-get -u dist-upgrade： パッケージのアップデート。「保留」の有無を確認します。
+
+
+

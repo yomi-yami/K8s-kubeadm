@@ -1,0 +1,28 @@
+1ディスクを拡張するケース。　※ディスクを追加する方法はまた別。
+
+# ディスク自体が拡張されているか確認
+lsblk
+# 拡張する。
+sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+lsblk
+
+# ファイルシステムには反映されていないので、resize2fs する
+sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
+
+# 拡張されていることを確認
+df -h
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
