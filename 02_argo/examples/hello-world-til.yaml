@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: hello-world-til-
+  labels:
+    workflows.argoproj.io/archive-strategy: "false"
+spec:
+  ttlStrategy:
+    secondsAfterCompletion: 100 #完了後に存続する秒数です
+    secondsAfterFailure: 5 #障害が発生してから存続する秒数
+    #    secondsAfterSuccess: 5 #成功後に存続する秒数です
+  entrypoint: whalesay
+  templates:
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [cowsay]
+      args: ["hello world"]

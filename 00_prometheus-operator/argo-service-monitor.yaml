@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+
+metadata:
+  name: argo-service-monitor
+  #  namespace: monitoring
+  namespace: argo
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: workflow-controller
+
+  namespaceSelector:
+    matchNames:
+      - argo
+          #    any: true
+  endpoints:
+  - port: metrics
+    #    path: /metrics
